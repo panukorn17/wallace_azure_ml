@@ -9,10 +9,10 @@ def data_cleaning(historical_information):
     #replace all starting and terminating station data arrival and departure times as 'starting' and 'terminating' 
     for i in tqdm(range(0,len(historical_information)), desc = '2/%d Giving arrival/departure time for starting/terminating stations' % total_for_loops):
         lenh = len(historical_information.loc[i,'5.schedule_detail'])
-        (historical_information.loc[i,'5.schedule_detail']).loc[0,'actual_ta']='starting'
-        (historical_information.loc[i,'5.schedule_detail']).loc[0,'gbtt_pta']='starting'
-        (historical_information.loc[i,'5.schedule_detail']).loc[lenh-1,'actual_td']='terminating'
-        (historical_information.loc[i,'5.schedule_detail']).loc[lenh-1,'gbtt_ptd']='terminating'
+        (historical_information.iloc[i]['5.schedule_detail']).loc[0,'actual_ta']='starting'
+        (historical_information.iloc[i]['5.schedule_detail']).loc[0,'gbtt_pta']='starting'
+        (historical_information.iloc[i]['5.schedule_detail']).loc[lenh-1,'actual_td']='terminating'
+        (historical_information.iloc[i]['5.schedule_detail']).loc[lenh-1,'gbtt_ptd']='terminating'
 
 
     # dropping all rows with greater than 10 percent missing data

@@ -15,8 +15,6 @@ Created on Mon Apr 30 14:59:58 2018
 #just for uni computers
 #if any new packages are installed dont forget to install it on the harddrive
 import sys
-sys.path.append('D:/Year 4/Dissertation/anaconda3/lib/python3.6/site-packages')
-
 
 import pandas as pd
 from tqdm import tqdm
@@ -24,7 +22,7 @@ import _pickle as cPickle
 import datetime
 from datetime import timedelta
 
-def data_structure_next_n_stations(historical_info_open, station_dwell_time_unique_open, OD_pairs_unique_open, n_prediction_steps):
+def df_next_n_stations(historical_info_open, station_dwell_time_unique_open, OD_pairs_unique_open, n_prediction_steps):
     no_all_points = historical_info_open.loc[:,'4.stops'].sum()
     format = '%H%M'    
 

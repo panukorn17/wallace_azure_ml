@@ -30,7 +30,7 @@ Content-Length: 178
 ```
 
 ## Preprocessing the data:
-To preprocess the data, run all cells in the `'data_preprocess.ipynb'`. This will create a directory where preprocessed data is dumped.
+To preprocess the data, run `'data_preprocess.py'`. This will create a directory where preprocessed data is dumped.
 
 ## Training the model
 To reproduce the training of our model, run the `'training.ipynb'`. This will train a DNN model that predicts the arrival delay of a train from one stop ahead.

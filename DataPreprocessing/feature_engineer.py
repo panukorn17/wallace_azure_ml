@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 
-def data_cleaning(historical_information):
+def feature_engineer(historical_information):
     total_for_loops = 18
 
     #replace all starting and terminating station data arrival and departure times as 'starting' and 'terminating' 

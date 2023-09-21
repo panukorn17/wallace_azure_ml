@@ -15,7 +15,7 @@ import _pickle as cPickle
 
 #pickle_in = open('D:/Wallace/Wallace-Github/data_preprocess/'+year+' Data/data_next_'+str(n_prediction_steps)+'_station_'+year+'.pickle',"rb")
 #dataset = cPickle.load(pickle_in)
-def delay_mechanism(dataset):
+def add_delay_mechanism(dataset):
     #insert new columns
     dataset.insert(loc=48, column='delay_type_2', value = 0)
     #dataset["delay_type_2_desc"] = ""

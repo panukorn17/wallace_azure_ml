@@ -1,31 +1,37 @@
+import io
 import datetime
 import numpy as np
 import pandas as pd
-import io
 
 from typing import Tuple, List
 from tqdm import tqdm
 from datetime import timedelta
 
+# initialise tqdm for pandas
+tqdm.pandas()
+
 THRESHOLD_MINUTES = 500
 TOTAL_FOR_LOOPS = 18
 MISSING_DATA_THRESHOLD = 10.0 
+STATION_OFFSET_TRAVEL_TIME = 1
+STATION_OFFSET_DWELL_TIME = 2
 
-def add_schedule_detail(historical_information: pd.DataFrame) -> pd.DataFrame:
+def add_schedule_detail(schedule: pd.DataFrame) -> pd.DataFrame:
     """
-    Add schedule detail to the historical information dataset.
+    Add schedule detail to a given schedule.
 
     Parameters:
-    - historical_information: DataFrame representing the historical information dataset.
+    - schedule: DataFrame representing the schedule.
 
     Returns:
-    - DataFrame with added schedule detail.
+    - DataFrame of schedule schdule.
     """
-    for i in tqdm(range(len(historical_information))):
-        df_schedule_detail = pd.read_csv(io.StringIO(historical_information.iloc[i]['5.schedule_detail']), sep=',', dtype=str)
-        df_schedule_detail = df_schedule_detail.drop(df_schedule_detail.columns[0], axis=1)
-        historical_information.at[i, '5.schedule_detail'] = df_schedule_detail
-    return historical_information
+    schedule = pd.read_csv(io.StringIO(schedule), sep=',', dtype=str)
+    schedule = schedule.drop(schedule.columns[0], axis=1)
+    return schedule
+
+def is_valid_string(value):
+    return value is not None and isinstance(value, str) and value != ""
 
 def set_starting_terminating_times(schedule: pd.DataFrame) -> pd.DataFrame:
     """ 
@@ -37,10 +43,10 @@ def set_starting_terminating_times(schedule: pd.DataFrame) -> pd.DataFrame:
     Returns:
     - DataFrame with modified starting and terminating times.
     """
-    schedule.iloc[0]['actual_ta'] = 'starting'
-    schedule.iloc[0]['gbtt_pta'] = 'starting'
-    schedule.iloc[-1]['actual_td'] = 'terminating'
-    schedule.iloc[-1]['gbtt_ptd'] = 'terminating'
+    schedule.at[0,'actual_ta'] = 'starting'
+    schedule.at[0,'gbtt_pta'] = 'starting'
+    schedule.at[-1,'actual_td'] = 'terminating'
+    schedule.at[-1,'gbtt_ptd'] = 'terminating'
     return schedule
 
 def calculate_missing_percentage(schedule: pd.DataFrame) -> float():
@@ -89,18 +95,18 @@ def travel_time(schedule: pd.DataFrame) -> pd.DataFrame:
     travel_times = [0] * len(schedule)
     travel_times_predicted = [0] * len(schedule)
 
-    for j in range(len(schedule) - 1):
+    for j in range(len(schedule) - STATION_OFFSET_TRAVEL_TIME):
         # for loop runs until the penultimate row to avoid index out of bounds error
         # get the actual and public arrival and departure time of the current and next station
         actual_td, actual_ta = schedule.iloc[j]['actual_td'], schedule.iloc[j + 1]['actual_ta']
         gbtt_ptd, gbtt_pta = schedule.iloc[j]['gbtt_ptd'], schedule.iloc[j + 1]['gbtt_pta']
 
         # if the actual and public arrival and departure time of the current and next station are not null then calculate the travel time
-        if isinstance(actual_ta, str) and isinstance(actual_td, str):
+        if is_valid_string(actual_ta) and is_valid_string(actual_td):
             # the actual travel time to get to the current station starting from the second station
             travel_times[j + 1] = get_time_difference(actual_td, actual_ta)
         
-        if isinstance(gbtt_pta, str) and isinstance(gbtt_ptd, str):
+        if is_valid_string(gbtt_pta) and is_valid_string(gbtt_ptd):
             # the predicted travel time to get to the current station starting from the second station
             travel_times_predicted[j + 1] = get_time_difference(gbtt_ptd, gbtt_pta)
 
@@ -123,17 +129,17 @@ def dwell_time(schedule: pd.DataFrame) -> pd.DataFrame:
     dwell_times = [0] * len(schedule)
     dwell_times_predicted = [0] * len(schedule)
 
-    for j in range(len(schedule) - 2):
+    for j in range(len(schedule) - STATION_OFFSET_DWELL_TIME):
         # for loop runs from the second row to the penultimate row as the first and last row will be the starting terminating station and not have a dwell time
         actual_ta, actual_td = schedule.iloc[j + 1]['actual_ta'], schedule.iloc[j + 1]['actual_td']
         gbtt_pta, gbtt_ptd = schedule.iloc[j + 1]['gbtt_pta'], schedule.iloc[j + 1]['gbtt_ptd']
         
         # if the actual and public arrival and departure time of the current and next station are not null then calculate the dwell time
-        if isinstance(actual_ta, str) and isinstance(actual_td, str):
+        if is_valid_string(actual_ta) and is_valid_string(actual_td):
             # the actual dwell time of the current station next station starting from the second station
             dwell_times[j + 1] = get_time_difference(actual_ta, actual_td)
 
-        if isinstance(gbtt_pta, str) and isinstance(gbtt_ptd, str):
+        if is_valid_string(gbtt_pta) and is_valid_string(gbtt_ptd):
             # the predicted dwell time of the current station next station starting from the second station
             dwell_times_predicted[j + 1] = get_time_difference(gbtt_pta, gbtt_ptd)
 
@@ -160,18 +166,22 @@ def dwell_time_extract(historical_information: pd.DataFrame) -> Tuple[pd.DataFra
     dwell_time_predicted_all_stations = []
     extreme_value_index = []
     
-    for i, row in tqdm(enumerate(historical_information.iterrows()), total=len(historical_information), desc=f'Extracting all dwell times'):
-        schedule_detail = row[1]['5.schedule_detail']
+    # Iterate through the DataFrame index
+    for i in tqdm(historical_information.index, desc=f'Extracting all dwell times'):
+        schedule_detail = historical_information.at[i, '5.schedule_detail']
         
-        for _, detail in schedule_detail.iterrows():
-            station = detail['location']
-            dwell_time = detail['dwell_time']
-            dwell_time_predicted = detail['dwell_time_predicted']
+        # Extract the necessary columns from schedule_detail
+        stations = schedule_detail['location'].tolist()
+        dwell_times = schedule_detail['dwell_time'].tolist()
+        dwell_times_predicted = schedule_detail['dwell_time_predicted'].tolist()
 
-            all_stations.append(station)
-            dwell_time_all_stations.append(dwell_time)
-            dwell_time_predicted_all_stations.append(dwell_time_predicted)
-
+        # Append to results lists
+        all_stations.extend(stations)
+        dwell_time_all_stations.extend(dwell_times)
+        dwell_time_predicted_all_stations.extend(dwell_times_predicted)
+        
+        # Check threshold conditions for each dwell time and predicted dwell time
+        for dwell_time, dwell_time_predicted in zip(dwell_times, dwell_times_predicted):
             if (np.absolute(dwell_time) > THRESHOLD_MINUTES) or (np.absolute(dwell_time_predicted) > THRESHOLD_MINUTES):
                 extreme_value_index.append(i)
     
@@ -214,11 +224,11 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
     '''
     # Set arrival/departure time for starting/terminating stations
     print('Setting arrival/departure time for starting/terminating stations...')
-    historical_information.loc[:,'5.schedule_detail'] = historical_information['5.schedule_detail'].apply(set_starting_terminating_times)
+    historical_information.loc[:,'5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(set_starting_terminating_times)
 
     # Calculate missing data percentages
     print('Calculating missing data percentages...')
-    historical_information.loc[:,'percentage_null'] = historical_information['5.schedule_detail'].apply(calculate_missing_percentage)
+    historical_information.loc[:,'percentage_null'] = historical_information['5.schedule_detail'].progress_apply(calculate_missing_percentage)
 
     # Drop rows with more than 10% missing data
     print('Dropping rows with more than 10% missing data...')
@@ -264,9 +274,9 @@ if __name__ == '__main__':
     OUTPUT_FILENAME = "Data/feature_engineered.csv"  # Adjust this accordingly, or include the dynamic filename generation logic.
 
     historical_information = pd.read_csv(DATA_PATHS[0])
-    historical_infromation_test = historical_information.head(1000)
-    historical_infromation_test = add_schedule_detail(historical_infromation_test)
+    print("Adding schedule detail...")
+    historical_information.loc[:,'5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(add_schedule_detail)
     # process historical information to add actual and predicted travel time and dwell time and get unique trips
-    historical_information_refactored, unique_trips = process_historical_data(historical_infromation_test)
+    historical_information_refactored, unique_trips = process_historical_data(historical_information)
     historical_information_refactored.to_csv(OUTPUT_FILENAME)
 

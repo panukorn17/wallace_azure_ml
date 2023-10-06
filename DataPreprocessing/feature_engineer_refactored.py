@@ -355,10 +355,42 @@ def extract_missing_aa_data(historical_information: pd.DataFrame) -> pd.DataFram
                     '1.origin': x.loc[j, 'location'],
                     '2.destination': x.loc[j + NEXT_STATION_OFFSET, 'location'],
                     '3.actual_departure_prev_station': x.loc[j, 'actual_td'],
-                    '4.actual_arrival': x.loc[j + NEXT_STATION_OFFSET, 'actual_ta'],
-                    '5.actual_departure_current_station': x.loc[j + NEXT_STATION_OFFSET, 'actual_td'],
+                    '4.actual_arrival_curr_station': x.loc[j + NEXT_STATION_OFFSET, 'actual_ta'],
+                    '5.actual_departure_curr_station': x.loc[j + NEXT_STATION_OFFSET, 'actual_td'],
                     '6.h_i_index': idx,
                     '7.s_d_index': j + NEXT_STATION_OFFSET,
+                    'average_actual_travel_time': 0,
+                    'average_predicted_travel_time': 0,
+                    'average_actual_dwell_time': 0,
+                    'average_predicted_dwell_time': 0
+                }
+                rows_list.append(data)
+
+    return pd.DataFrame(rows_list)
+
+def extract_missing_ad_data(historical_information: pd.DataFrame) -> pd.DataFrame:
+    '''
+    Extract data with missing actual departure times and their indexes in the historical information dataframe and schedule dataframe.
+
+    Parameters:
+    - historical_information: DataFrame representing the historical information dataset.
+
+    Returns:
+    - DataFrame containing missing data.
+    '''
+    rows_list = []
+    for idx, row in historical_information.iterrows():
+        x = row['5.schedule_detail']
+        for j in x.index[:-1]:
+            if pd.isna(x.loc[j, 'actual_td']):
+                data = {
+                    '1.origin': x.loc[j, 'location'],
+                    '2.destination': x.loc[j + NEXT_STATION_OFFSET, 'location'],
+                    '3.actual_arrival_curr_station': x.loc[j, 'actual_ta'],
+                    '4.actual_departure_curr_station': x.loc[j, 'actual_td'],
+                    '5.actual_arrival_next_station': x.loc[j + NEXT_STATION_OFFSET, 'actual_ta'],
+                    '6.h_i_index': idx,
+                    '7.s_d_index': j,
                     'average_actual_travel_time': 0,
                     'average_predicted_travel_time': 0,
                     'average_actual_dwell_time': 0,
@@ -380,52 +412,52 @@ def drop_all_null_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
     return df.dropna(axis=0, how='all')
 
-def merge_travel_times(aa_nan: pd.DataFrame, OD_pairs_unique: pd.DataFrame) -> pd.DataFrame:
+def merge_travel_times(actual_nan: pd.DataFrame, OD_pairs_unique: pd.DataFrame) -> pd.DataFrame:
     """
     Merge average actual and predicted travel times.
     
     Parameters:
-    - aa_nan: DataFrame containing missing data.
+    - actual_nan: DataFrame containing missing actual data.
     - OD_pairs_unique: DataFrame containing OD pairs.
     
     Returns:
     - DataFrame with merged average actual and predicted travel times.
     """
-    # Similar to SQL left join, match the origin and destination columns in aa_nan and OD_pairs_unique and merge the two dataframes
+    # Similar to SQL left join, match the origin and destination columns in actual_nan and OD_pairs_unique and merge the two dataframes
     # to get the average actual and predicted travel times for the missing data
     merged = pd.merge(
-        aa_nan, 
+        actual_nan, 
         OD_pairs_unique[['1.origin', '2.destination', 'average_travel_time', 'average_travel_time_predicted']], 
         on=['1.origin', '2.destination'], 
         how='left'
     )
-    aa_nan['average_actual_travel_time'] = merged['average_travel_time']
-    aa_nan['average_predicted_travel_time'] = merged['average_travel_time_predicted']
-    return aa_nan
+    actual_nan['average_actual_travel_time'] = merged['average_travel_time']
+    actual_nan['average_predicted_travel_time'] = merged['average_travel_time_predicted']
+    return actual_nan
 
-def merge_dwell_times(aa_nan: pd.DataFrame, station_dwell_time_unique: pd.DataFrame) -> pd.DataFrame:
+def merge_dwell_times(actual_nan: pd.DataFrame, station_dwell_time_unique: pd.DataFrame) -> pd.DataFrame:
     """
     Merge average dwell and predicted dwell times.
     
     Parameters:
-    - aa_nan: DataFrame containing missing data.
+    - actual_nan: DataFrame containing missing data.
     - station_dwell_time_unique: DataFrame containing station dwell time data.
     
     Returns:
     - DataFrame with merged average dwell and predicted dwell times.
     """
-    # Similar to SQL left join, match the destination column in aa_nan and station_dwell_time_unique and merge the two dataframes
+    # Similar to SQL left join, match the destination column in actual_nan and station_dwell_time_unique and merge the two dataframes
     # to get the average actual and predicted dwell times for the missing data
     merged = pd.merge(
-        aa_nan,
+        actual_nan,
         station_dwell_time_unique[['1.station', 'average_dwell_time', 'average_dwell_time_predicted']],
         left_on='2.destination',
         right_on='1.station',
         how='left'
     )
-    aa_nan['average_actual_dwell_time'] = merged['average_dwell_time']
-    aa_nan['average_predicted_dwell_time'] = merged['average_dwell_time_predicted']
-    return aa_nan
+    actual_nan['average_actual_dwell_time'] = merged['average_dwell_time']
+    actual_nan['average_predicted_dwell_time'] = merged['average_dwell_time_predicted']
+    return actual_nan
 
 def str_to_datetime(date_series: pd.Series, format: str)-> pd.Series:
     """
@@ -439,31 +471,6 @@ def str_to_datetime(date_series: pd.Series, format: str)-> pd.Series:
     - Series of datetime.
     """
     return pd.to_datetime(date_series, format=format, errors='coerce')
-
-def process_condition_1(row: pd.DataFrame, format: str)-> datetime:
-    '''
-    Process the arrival time for condition 1. This is when the arrive time calculated from the previous station is greater than the actual departure time of the current station.
-
-    Parameters:
-    - row: DataFrame representing a row in the schedule.
-    - format: Format of time strings.
-
-    Returns:
-    - Arrival time.
-    '''
-    prev_dep_str = row['3.actual_departure_prev_station']
-    curr_dep_str = row['5.actual_departure_current_station']
-    prev_station_dep = str_to_datetime(prev_dep_str, format)
-    curr_station_dep = str_to_datetime(curr_dep_str, format)
-    avg_travel_time = row['average_predicted_travel_time']
-    avg_dwell_time = row['average_predicted_dwell_time']
-
-    arrival_time = compute_arrival_from_prev(prev_station_dep, avg_travel_time, format)
-    if arrival_time and arrival_time > curr_dep_str:
-        arrival_time = compute_arrival_from_current(curr_station_dep, avg_dwell_time, format)
-        if arrival_time and arrival_time < prev_dep_str:
-            arrival_time = None
-    return arrival_time
 
 def compute_arrival_from_prev(prev_station_dep: datetime, avg_travel_time: float, format: str)-> datetime:
     """
@@ -497,7 +504,89 @@ def compute_arrival_from_current(curr_station_dep: datetime, avg_dwell_time: flo
         return (curr_station_dep - timedelta(minutes=avg_dwell_time)).strftime(format)
     return None
 
-def process_condition_2(row: pd.DataFrame, format: str)-> datetime:
+def compute_departure_from_next(next_station_arr: datetime, avg_travel_time: float, format: str)-> datetime:
+    """
+    Compute departure time based on next station's arrival.
+    
+    Parameters:
+    - next_station_arr: Next station's arrival time.
+    - avg_travel_time: Average travel time.
+    - format: Format of time strings.
+
+    Returns:
+    - Departure time.
+    """
+    if next_station_arr:
+        return (next_station_arr - timedelta(minutes=avg_travel_time)).strftime(format)
+    return None
+
+def compute_departure_from_current(curr_station_arr: datetime, avg_dwell_time: float, format: str)-> datetime:
+    """
+    Compute departure time based on current station's arrival.
+    
+    Parameters:
+    - curr_station_arr: Current station's arrival time.
+    - avg_dwell_time: Average dwell time.
+    - format: Format of time strings.
+
+    Returns:
+    - Departure time.
+    """
+    if curr_station_arr:
+        return (curr_station_arr + timedelta(minutes=avg_dwell_time)).strftime(format)
+    return None
+
+def process_condition_1_aa(row: pd.DataFrame, format: str)-> datetime:
+    '''
+    Process the arrival time for condition 1. This is when the arrive time calculated from the previous station is greater than the actual departure time of the current station.
+
+    Parameters:
+    - row: DataFrame representing a row in the schedule.
+    - format: Format of time strings.
+
+    Returns:
+    - Arrival time.
+    '''
+    prev_dep_str = row['3.actual_departure_prev_station']
+    curr_dep_str = row['5.actual_departure_curr_station']
+    prev_station_dep = str_to_datetime(prev_dep_str, format)
+    curr_station_dep = str_to_datetime(curr_dep_str, format)
+    avg_travel_time = row['average_predicted_travel_time']
+    avg_dwell_time = row['average_predicted_dwell_time']
+
+    arrival_time = compute_arrival_from_prev(prev_station_dep, avg_travel_time, format)
+    if arrival_time and arrival_time > curr_dep_str:
+        arrival_time = compute_arrival_from_current(curr_station_dep, avg_dwell_time, format)
+        if arrival_time and arrival_time < prev_dep_str:
+            arrival_time = None
+    return arrival_time
+
+def process_condition_1_ad(row: pd.DataFrame, format: str)-> datetime:
+    '''
+    Process the departure time for condition 1. This is when the departure time calculated from the next station is greater than the actual departure time of the current station.
+
+    Parameters:
+    - row: DataFrame representing a row in the schedule.
+    - format: Format of time strings.
+
+    Returns:
+    - Arrival time.
+    '''
+    curr_arr_str = row['3.actual_arrival_curr_station']
+    next_arr_str = row['5.actual_arrival_next_station']
+    next_station_arr = str_to_datetime(next_arr_str, format)
+    curr_station_arr = str_to_datetime(curr_arr_str, format)
+    avg_travel_time = row['average_predicted_travel_time']
+    avg_dwell_time = row['average_predicted_dwell_time']
+
+    departure_time = compute_departure_from_next(next_station_arr, avg_travel_time, format)
+    if departure_time and departure_time < curr_arr_str:
+        departure_time = compute_departure_from_current(curr_station_arr, avg_dwell_time, format)
+        if departure_time and departure_time > next_arr_str:
+            departure_time = None
+    return departure_time
+
+def process_condition_2_aa(row: pd.DataFrame, format: str)-> datetime:
     '''
     Process the arrival time for condition 2. This is when only previous station has data or current is terminating.
 
@@ -514,7 +603,7 @@ def process_condition_2(row: pd.DataFrame, format: str)-> datetime:
     return compute_arrival_from_prev(prev_station_dep, avg_travel_time, format)
 
 
-def process_condition_3(row: pd.DataFrame, format: str)-> datetime:
+def process_condition_3_aa(row: pd.DataFrame, format: str)-> datetime:
     '''
     Process the arrival time for condition 3. This is when only current station has data and it's not terminating.
 
@@ -525,7 +614,7 @@ def process_condition_3(row: pd.DataFrame, format: str)-> datetime:
     Returns:
     - Arrival time.
     '''
-    curr_dep_str = row['5.actual_departure_current_station']
+    curr_dep_str = row['5.actual_departure_curr_station']
     curr_station_dep = str_to_datetime(curr_dep_str, format)
     avg_dwell_time = row['average_predicted_dwell_time']
     return compute_arrival_from_current(curr_station_dep, avg_dwell_time, format)
@@ -546,28 +635,60 @@ def impute_missing_actual_arrival(aa_nan: pd.DataFrame, historical_information: 
         row = aa_nan.iloc[i]
 
         prev_dep_str = row['3.actual_departure_prev_station']
-        curr_dep_str = row['5.actual_departure_current_station']
+        curr_dep_str = row['5.actual_departure_curr_station']
 
         # Condition 1: both previous and current stations have data and current isn't terminating
         if pd.notna(prev_dep_str) and pd.notna(curr_dep_str) and curr_dep_str != 'terminating':
-            arrival_time = process_condition_1(row, format)
+            arrival_time = process_condition_1_aa(row, format)
 
         # Condition 2: only previous station has data or current is terminating
         elif pd.notna(prev_dep_str) and (pd.isna(curr_dep_str) or curr_dep_str == 'terminating'):
-            arrival_time = process_condition_2(row, format)
+            arrival_time = process_condition_2_aa(row, format)
 
         # Condition 3: only current station has data and it's not terminating
         elif pd.isna(prev_dep_str) and pd.notna(curr_dep_str) and curr_dep_str != 'terminating':
-            arrival_time = process_condition_3(row, format)
+            arrival_time = process_condition_3_aa(row, format)
         else:
             arrival_time = None
 
         # Set the computed values
         aa_nan.at[i, 'actual_arrival_time_1'] = arrival_time
-        aa_nan.at[i, '4.actual_arrival'] = arrival_time
+        aa_nan.at[i, '4.actual_arrival_curr_station'] = arrival_time
         h_i_index = aa_nan.at[i, '6.h_i_index']
         s_d_index = aa_nan.at[i, '7.s_d_index']
         historical_information.at[h_i_index, '5.schedule_detail'].at[s_d_index, 'actual_ta'] = arrival_time
+
+def impute_missing_actual_departure(ad_nan: pd.DataFrame, historical_information: pd.DataFrame, format: str):
+    '''
+    Impute missing actual departure time into the historical_information dataframe.
+
+    Parameters:
+    - ad_nan: DataFrame containing missing data.
+    - historical_information: DataFrame representing the historical information dataset.
+
+    Returns:
+    - DataFrame with imputed missing data.
+    '''
+    # Initialize column with default values
+    ad_nan['actual_departure_time_1'] = [0] * len(ad_nan)
+
+    for i in tqdm(range(len(ad_nan))):
+        row = ad_nan.iloc[i]
+
+        curr_arr_str = row['3.actual_arrival_curr_station']
+        next_arr_str = row['5.actual_arrival_next_station']
+        
+        # calculate the departure time from the current station based on the arrival time of the of the next station adn the average travel time
+
+        # Condition 1: both previous and current stations have data and the next station isn't starting
+        if pd.notna(curr_arr_str) and pd.notna(next_arr_str) and next_arr_str != 'starting':
+            departure_time = process_condition_1_ad(row, format)
+
+
+        matched_od = OD_pairs_unique[(OD_pairs_unique['1.origin'] == curr_station) & (OD_pairs_unique['2.destination'] == next_station)]
+        if not matched_od.empty:
+            ad_nan.loc[i, 'average_actual_travel_time'] = matched_od['average_travel_time'].values[0]
+            ad_nan.loc[i, 'average_predicted_travel_time'] = matched_od['average_travel_time_predicted'].values[0]
 
 def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     '''
@@ -637,7 +758,7 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
         if total_null == 0:
             break
         
-        # Extract missing actual arrival data
+        # Extract missing actual arrival times
         print('Extracting missing actual arrival data...')
         aa_nan = extract_missing_aa_data(historical_information)
         aa_nan = drop_all_null_rows(aa_nan)
@@ -645,6 +766,15 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
         aa_nan = merge_dwell_times(aa_nan, station_dwell_time_unique)
         # Impute missing actual arrival time into the historical_information dataframe and update the actual arrival missing dataframe
         impute_missing_actual_arrival(aa_nan, historical_information, FORMAT)
+
+        # Extract missing actual departure times
+        print('Extracting missing actual departure data...')
+        ad_nan = extract_missing_ad_data(historical_information)
+        ad_nan = drop_all_null_rows(ad_nan)
+        ad_nan = merge_travel_times(ad_nan, od_pairs_unique)
+        ad_nan = merge_dwell_times(ad_nan, station_dwell_time_unique)
+        # Impute missing actual departure time into the historical_information dataframe and update the actual departure missing dataframe
+        impute_missing_actual_departure(ad_nan, historical_information, FORMAT)
 
 
     return historical_information, unique_trips

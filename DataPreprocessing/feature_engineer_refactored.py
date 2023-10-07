@@ -570,7 +570,7 @@ def process_condition_1_ad(row: pd.DataFrame, format: str)-> datetime:
     - format: Format of time strings.
 
     Returns:
-    - Arrival time.
+    - Departure time.
     '''
     curr_arr_str = row['3.actual_arrival_curr_station']
     next_arr_str = row['5.actual_arrival_next_station']
@@ -602,6 +602,22 @@ def process_condition_2_aa(row: pd.DataFrame, format: str)-> datetime:
     avg_travel_time = row['average_predicted_travel_time']
     return compute_arrival_from_prev(prev_station_dep, avg_travel_time, format)
 
+def process_condition_2_ad(row: pd.DataFrame, format: str)-> datetime:
+    '''
+    Process the departure time for condition 2. This is when the next station 
+    arrival has data and current station arrival has no data or is starting
+
+    Parameters:
+    - row: DataFrame representing a row in the schedule.
+    - format: Format of time strings.
+
+    Returns:
+    - Departure time.
+    '''
+    next_arr_str = row['5.actual_arrival_next_station']
+    next_station_arr = str_to_datetime(next_arr_str, format)
+    avg_travel_time = row['average_predicted_travel_time']
+    return compute_departure_from_next(next_station_arr, avg_travel_time, format)
 
 def process_condition_3_aa(row: pd.DataFrame, format: str)-> datetime:
     '''
@@ -618,6 +634,22 @@ def process_condition_3_aa(row: pd.DataFrame, format: str)-> datetime:
     curr_station_dep = str_to_datetime(curr_dep_str, format)
     avg_dwell_time = row['average_predicted_dwell_time']
     return compute_arrival_from_current(curr_station_dep, avg_dwell_time, format)
+
+def process_condition_3_ad(row: pd.DataFrame, format: str)-> datetime:
+    '''
+    Process the departure time for condition 3. This is when the current station has data and is starting and next station arrival has no data.
+
+    Parameters:
+    - row: DataFrame representing a row in the schedule.
+    - format: Format of time strings.
+
+    Returns:
+    - Departure time.
+    '''
+    curr_arr_str = row['3.actual_arrival_curr_station']
+    curr_station_arr = str_to_datetime(curr_arr_str, format)
+    avg_dwell_time = row['average_predicted_dwell_time']
+    return compute_departure_from_current(curr_station_arr, avg_dwell_time, format)
 
 def impute_missing_actual_arrival(aa_nan: pd.DataFrame, historical_information: pd.DataFrame, format: str):
     '''
@@ -680,15 +712,27 @@ def impute_missing_actual_departure(ad_nan: pd.DataFrame, historical_information
         
         # calculate the departure time from the current station based on the arrival time of the of the next station adn the average travel time
 
-        # Condition 1: both previous and current stations have data and the next station isn't starting
+        # Condition 1: when both previous and current stations have data and the next station isn't starting
         if pd.notna(curr_arr_str) and pd.notna(next_arr_str) and next_arr_str != 'starting':
             departure_time = process_condition_1_ad(row, format)
 
+        # Condition 2: when next station arrival has data and current station arrival has no data or is starting
+        elif pd.notna(next_arr_str) and ((pd.isna(curr_arr_str) or curr_arr_str == 'starting')):
+            departure_time = process_condition_2_ad(row, format)
 
-        matched_od = OD_pairs_unique[(OD_pairs_unique['1.origin'] == curr_station) & (OD_pairs_unique['2.destination'] == next_station)]
-        if not matched_od.empty:
-            ad_nan.loc[i, 'average_actual_travel_time'] = matched_od['average_travel_time'].values[0]
-            ad_nan.loc[i, 'average_predicted_travel_time'] = matched_od['average_travel_time_predicted'].values[0]
+        # Condition 3: when the current station has data and is starting and next station arrival has no data
+        elif pd.notna(curr_arr_str) and curr_arr_str == 'starting' and pd.isna(next_arr_str):
+            departure_time = process_condition_3_ad(row, format)
+
+        else:
+            departure_time = None
+
+        # Set the computed values
+        ad_nan.at[i, 'actual_departure_time_1'] = departure_time
+        ad_nan.at[i, '4.actual_departure_curr_station'] = departure_time
+        h_i_index = ad_nan.at[i, '6.h_i_index']
+        s_d_index = ad_nan.at[i, '7.s_d_index']
+        historical_information.at[h_i_index, '5.schedule_detail'].at[s_d_index, 'actual_td'] = departure_time
 
 def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     '''
@@ -775,7 +819,6 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
         ad_nan = merge_dwell_times(ad_nan, station_dwell_time_unique)
         # Impute missing actual departure time into the historical_information dataframe and update the actual departure missing dataframe
         impute_missing_actual_departure(ad_nan, historical_information, FORMAT)
-
 
     return historical_information, unique_trips
 

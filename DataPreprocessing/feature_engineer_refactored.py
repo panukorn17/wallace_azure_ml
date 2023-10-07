@@ -11,8 +11,8 @@ from datetime import timedelta
 tqdm.pandas()
 
 THRESHOLD_MINUTES = 500
-TOTAL_FOR_LOOPS = 18
-MISSING_DATA_THRESHOLD = 10.0 
+MISSING_DATA_THRESHOLD_INITIAL = 10.0 
+MISSING_DATA_THRESHOLD_FINAL = 0
 STATION_OFFSET_TRAVEL_TIME = 1
 STATION_OFFSET_DWELL_TIME = 2
 NEXT_STATION_OFFSET = 1
@@ -314,7 +314,6 @@ def drop_nan_pairs(historical_information: pd.DataFrame, OD_pairs_unique: pd.Dat
     OD_pairs_unique_nan = OD_pairs_unique[np.isnan(OD_pairs_unique['average_travel_time'])][['1.origin', '2.destination']].values.tolist()
     # Convert each inner list into a tuple. The result is a list of tuples, where each tuple represents an (origin, destination) pair.
     OD_pairs_unique_nan = [tuple(i) for i in OD_pairs_unique_nan]
-
     # Check for each row if it contains any OD nan pair
     to_drop = historical_information['5.schedule_detail'].apply(
         lambda x: any((row['location'], x.loc[idx + NEXT_STATION_OFFSET, 'location']) in OD_pairs_unique_nan for idx, row in x.iterrows() if idx + NEXT_STATION_OFFSET < len(x))
@@ -663,7 +662,7 @@ def impute_missing_actual_arrival(aa_nan: pd.DataFrame, historical_information: 
     # Initialize column with default values
     aa_nan['actual_arrival_time_1'] = [0] * len(aa_nan)
 
-    for i in len(aa_nan):
+    for i in range(0, len(aa_nan)):
         row = aa_nan.iloc[i]
 
         prev_dep_str = row['3.actual_departure_prev_station']
@@ -704,7 +703,7 @@ def impute_missing_actual_departure(ad_nan: pd.DataFrame, historical_information
     # Initialize column with default values
     ad_nan['actual_departure_time_1'] = [0] * len(ad_nan)
 
-    for i in len(ad_nan):
+    for i in range(0,len(ad_nan)):
         row = ad_nan.iloc[i]
 
         curr_arr_str = row['3.actual_arrival_curr_station']
@@ -734,6 +733,53 @@ def impute_missing_actual_departure(ad_nan: pd.DataFrame, historical_information
         s_d_index = ad_nan.at[i, '7.s_d_index']
         historical_information.at[h_i_index, '5.schedule_detail'].at[s_d_index, 'actual_td'] = departure_time
 
+def impute_missing_data(historical_information: pd.DataFrame, od_pairs_unique: pd.DataFrame, station_dwell_time_unique: pd.DataFrame):
+    '''
+    Impute missing data into the historical_information dataframe.
+
+    Parameters:
+    - historical_information: DataFrame representing the historical information dataset.
+    - od_pairs_unique: DataFrame containing OD pairs.
+    - station_dwell_time_unique: DataFrame containing station dwell time data.
+
+    Returns:
+    - DataFrame with imputed missing data.
+    '''    
+    # Compute missing data stats
+    total_null = get_total_null(historical_information)
+    print('Total null values =', total_null)
+
+    # Initialize total null new
+    total_null_new = 0
+
+    # while the total null reduces, keep imputing missing data
+    while abs(total_null - total_null_new) > 0:
+        # Update total null
+        total_null_new = total_null
+        # Extract missing actual arrival times
+        print('Extracting missing actual arrival data...')
+        aa_nan = extract_missing_aa_data(historical_information)
+        aa_nan = drop_all_null_rows(aa_nan)
+        # check null:
+        if not(aa_nan.empty):
+            aa_nan = merge_travel_times(aa_nan, od_pairs_unique)
+            aa_nan = merge_dwell_times(aa_nan, station_dwell_time_unique)
+            # Impute missing actual arrival time into the historical_information dataframe and update the actual arrival missing dataframe
+            impute_missing_actual_arrival(aa_nan, historical_information, FORMAT)
+        # Extract missing actual departure times
+        print('Extracting missing actual departure data...')
+        ad_nan = extract_missing_ad_data(historical_information)
+        ad_nan = drop_all_null_rows(ad_nan)
+        # check null:
+        if not(ad_nan.empty):
+            ad_nan = merge_travel_times(ad_nan, od_pairs_unique)
+            ad_nan = merge_dwell_times(ad_nan, station_dwell_time_unique)
+            # Impute missing actual departure time into the historical_information dataframe and update the actual departure missing dataframe
+            impute_missing_actual_departure(ad_nan, historical_information, FORMAT)
+        # Compute missing data stats
+        total_null = get_total_null(historical_information)
+        print('Total null values =', total_null)
+
 def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     '''
     Process the historical information dataset.
@@ -754,7 +800,7 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
 
     # Drop rows with more than 10% missing data
     print('Dropping rows with more than 10% missing data...')
-    historical_information = historical_information[historical_information['percentage_null'] <= MISSING_DATA_THRESHOLD].reset_index(drop=True)
+    historical_information = historical_information[historical_information['percentage_null'] <= MISSING_DATA_THRESHOLD_INITIAL].reset_index(drop=True)
 
     # Extract trips to find unique ones
     print('Extracting trips to find unique ones...')
@@ -794,40 +840,31 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
     # Drop rows with nan values
     historical_information = drop_nan_pairs(historical_information, od_pairs_unique)
     
-    # Compute missing data stats
-    total_null = get_total_null(historical_information)
-    print('Total null values =', total_null)
+    # Impuete missing data
+    print('Imputing missing data...')
+    impute_missing_data(historical_information, od_pairs_unique, station_dwell_time_unique)
     
-    # Initialize total null new
-    total_null_new = 0
+    # Create OD pairs DataFrame
+    print('Creating final OD pairs DataFrame...')
+    od_pairs = create_OD_pairs_dataframe(origins, destinations, travel_times, predicted_travel_times)
+    
+    # Calculate summary statistics for travel times
+    print('Calculating final summary statistics for travel times...')
+    od_pairs_unique = travel_time_summary_statistics(od_pairs)
+    
+    # Extract dwell times for each station
+    print('Extracting final dwell times for each station...')
+    dwell_time_stations, extreme_value_index = dwell_time_extract(historical_information)
 
-    # while the total null reduces, keep imputing missing data
-    while abs(total_null - total_null_new) > 0:
-        # Update total null
-        total_null_new = total_null
-        # Extract missing actual arrival times
-        print('Extracting missing actual arrival data...')
-        aa_nan = extract_missing_aa_data(historical_information)
-        aa_nan = drop_all_null_rows(aa_nan)
-        # check null:
-        if not(aa_nan.empty):
-            aa_nan = merge_travel_times(aa_nan, od_pairs_unique)
-            aa_nan = merge_dwell_times(aa_nan, station_dwell_time_unique)
-            # Impute missing actual arrival time into the historical_information dataframe and update the actual arrival missing dataframe
-            impute_missing_actual_arrival(aa_nan, historical_information, FORMAT)
-        # Extract missing actual departure times
-        print('Extracting missing actual departure data...')
-        ad_nan = extract_missing_ad_data(historical_information)
-        ad_nan = drop_all_null_rows(ad_nan)
-        # check null:
-        if not(ad_nan.empty):
-            ad_nan = merge_travel_times(ad_nan, od_pairs_unique)
-            ad_nan = merge_dwell_times(ad_nan, station_dwell_time_unique)
-            # Impute missing actual departure time into the historical_information dataframe and update the actual departure missing dataframe
-            impute_missing_actual_departure(ad_nan, historical_information, FORMAT)
-        # Compute missing data stats
-        total_null = get_total_null(historical_information)
-        print('Total null values =', total_null)
+    # Calculate missing data percentages
+    print('Calculating final missing data percentages...')
+    historical_information.loc[:,'percentage_null'] = historical_information['5.schedule_detail'].progress_apply(calculate_missing_percentage)
+
+    # Drop rows with more than 10% missing data
+    print('Dropping final rows with more than any missing data...')
+    historical_information = historical_information[historical_information['percentage_null'] <= MISSING_DATA_THRESHOLD_FINAL].reset_index(drop=True)
+
+
     return historical_information, unique_trips
 
 if __name__ == '__main__':
@@ -835,7 +872,7 @@ if __name__ == '__main__':
     DATA_PATHS = ["Data/hist_info_DID_PAD_2016.csv"]
     OUTPUT_FILENAME = "Data/feature_engineered.csv"  # Adjust this accordingly, or include the dynamic filename generation logic.
 
-    historical_information = pd.read_csv(DATA_PATHS[0]).head(1000)
+    historical_information = pd.read_csv(DATA_PATHS[0])
     print("Adding schedule detail...")
     historical_information.loc[:,'5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(add_schedule_detail)
     # process historical information to add actual and predicted travel time and dwell time and get unique trips

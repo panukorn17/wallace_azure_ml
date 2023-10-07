@@ -663,7 +663,7 @@ def impute_missing_actual_arrival(aa_nan: pd.DataFrame, historical_information: 
     # Initialize column with default values
     aa_nan['actual_arrival_time_1'] = [0] * len(aa_nan)
 
-    for i in tqdm(range(len(aa_nan))):
+    for i in len(aa_nan):
         row = aa_nan.iloc[i]
 
         prev_dep_str = row['3.actual_departure_prev_station']
@@ -704,7 +704,7 @@ def impute_missing_actual_departure(ad_nan: pd.DataFrame, historical_information
     # Initialize column with default values
     ad_nan['actual_departure_time_1'] = [0] * len(ad_nan)
 
-    for i in tqdm(range(len(ad_nan))):
+    for i in len(ad_nan):
         row = ad_nan.iloc[i]
 
         curr_arr_str = row['3.actual_arrival_curr_station']
@@ -798,8 +798,13 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
     total_null = get_total_null(historical_information)
     print('Total null values =', total_null)
     
-    # while the total null values is not zero
-    while total_null > 0:
+    # Initialize total null new
+    total_null_new = 0
+
+    # while the total null reduces, keep imputing missing data
+    while abs(total_null - total_null_new) > 0:
+        # Update total null
+        total_null_new = total_null
         # Extract missing actual arrival times
         print('Extracting missing actual arrival data...')
         aa_nan = extract_missing_aa_data(historical_information)
@@ -810,7 +815,6 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
             aa_nan = merge_dwell_times(aa_nan, station_dwell_time_unique)
             # Impute missing actual arrival time into the historical_information dataframe and update the actual arrival missing dataframe
             impute_missing_actual_arrival(aa_nan, historical_information, FORMAT)
-
         # Extract missing actual departure times
         print('Extracting missing actual departure data...')
         ad_nan = extract_missing_ad_data(historical_information)
@@ -821,7 +825,6 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
             ad_nan = merge_dwell_times(ad_nan, station_dwell_time_unique)
             # Impute missing actual departure time into the historical_information dataframe and update the actual departure missing dataframe
             impute_missing_actual_departure(ad_nan, historical_information, FORMAT)
-        
         # Compute missing data stats
         total_null = get_total_null(historical_information)
         print('Total null values =', total_null)

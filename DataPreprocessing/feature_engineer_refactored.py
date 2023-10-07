@@ -713,7 +713,7 @@ def impute_missing_actual_departure(ad_nan: pd.DataFrame, historical_information
         # calculate the departure time from the current station based on the arrival time of the of the next station adn the average travel time
 
         # Condition 1: when both previous and current stations have data and the next station isn't starting
-        if pd.notna(curr_arr_str) and pd.notna(next_arr_str) and next_arr_str != 'starting':
+        if pd.notna(curr_arr_str) and pd.notna(next_arr_str) and curr_arr_str != 'starting':
             departure_time = process_condition_1_ad(row, format)
 
         # Condition 2: when next station arrival has data and current station arrival has no data or is starting
@@ -721,7 +721,7 @@ def impute_missing_actual_departure(ad_nan: pd.DataFrame, historical_information
             departure_time = process_condition_2_ad(row, format)
 
         # Condition 3: when the current station has data and is starting and next station arrival has no data
-        elif pd.notna(curr_arr_str) and curr_arr_str == 'starting' and pd.isna(next_arr_str):
+        elif pd.notna(curr_arr_str) and curr_arr_str != 'starting' and pd.isna(next_arr_str):
             departure_time = process_condition_3_ad(row, format)
 
         else:
@@ -793,33 +793,38 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
 
     # Drop rows with nan values
     historical_information = drop_nan_pairs(historical_information, od_pairs_unique)
-
+    
+    # Compute missing data stats
+    total_null = get_total_null(historical_information)
+    print('Total null values =', total_null)
+    
     # while the total null values is not zero
-    while True:
-        # Compute missing data stats
-        total_null = get_total_null(historical_information)
-        print('Total null values =', total_null)
-        if total_null == 0:
-            break
-        
+    while total_null > 0:
         # Extract missing actual arrival times
         print('Extracting missing actual arrival data...')
         aa_nan = extract_missing_aa_data(historical_information)
         aa_nan = drop_all_null_rows(aa_nan)
-        aa_nan = merge_travel_times(aa_nan, od_pairs_unique)
-        aa_nan = merge_dwell_times(aa_nan, station_dwell_time_unique)
-        # Impute missing actual arrival time into the historical_information dataframe and update the actual arrival missing dataframe
-        impute_missing_actual_arrival(aa_nan, historical_information, FORMAT)
+        # check null:
+        if not(aa_nan.empty):
+            aa_nan = merge_travel_times(aa_nan, od_pairs_unique)
+            aa_nan = merge_dwell_times(aa_nan, station_dwell_time_unique)
+            # Impute missing actual arrival time into the historical_information dataframe and update the actual arrival missing dataframe
+            impute_missing_actual_arrival(aa_nan, historical_information, FORMAT)
 
         # Extract missing actual departure times
         print('Extracting missing actual departure data...')
         ad_nan = extract_missing_ad_data(historical_information)
         ad_nan = drop_all_null_rows(ad_nan)
-        ad_nan = merge_travel_times(ad_nan, od_pairs_unique)
-        ad_nan = merge_dwell_times(ad_nan, station_dwell_time_unique)
-        # Impute missing actual departure time into the historical_information dataframe and update the actual departure missing dataframe
-        impute_missing_actual_departure(ad_nan, historical_information, FORMAT)
-
+        # check null:
+        if not(ad_nan.empty):
+            ad_nan = merge_travel_times(ad_nan, od_pairs_unique)
+            ad_nan = merge_dwell_times(ad_nan, station_dwell_time_unique)
+            # Impute missing actual departure time into the historical_information dataframe and update the actual departure missing dataframe
+            impute_missing_actual_departure(ad_nan, historical_information, FORMAT)
+        
+        # Compute missing data stats
+        total_null = get_total_null(historical_information)
+        print('Total null values =', total_null)
     return historical_information, unique_trips
 
 if __name__ == '__main__':

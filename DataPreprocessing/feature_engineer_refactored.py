@@ -780,6 +780,86 @@ def impute_missing_data(historical_information: pd.DataFrame, od_pairs_unique: p
         total_null = get_total_null(historical_information)
         print('Total null values =', total_null)
 
+def extract_origin_departure_time(schedule_detail: pd.DataFrame)-> datetime:
+    """
+    Extracts the origin departure time from a schedule detail.
+
+    Parameters:
+    - schedule_detail: DataFrame representing a schedule detail.
+
+    Returns:
+    - Origin departure time.
+    """
+    return schedule_detail.loc[0, 'actual_td']
+
+def get_unique_dates(historical_data: pd.DataFrame)-> pd.DataFrame:
+    """
+    Extracts unique dates from the historical data.
+
+    Parameters:
+    - historical_data: DataFrame representing the historical data.
+
+    Returns:
+    - DataFrame containing unique dates of the historical data.
+    """
+    dates = historical_data['1.date'].to_frame()
+    is_duplicate = dates.duplicated('1.date', keep='first')
+    return dates[~is_duplicate].reset_index(drop=True)['1.date']
+
+def compute_departure_order_for_date(historical_data: pd.DataFrame, date: datetime)-> List[int]:
+    """
+    Computes the departure order for a given date.
+
+    Parameters:
+    - historical_data: DataFrame representing the historical data.
+    - date: Date.
+
+    Returns:
+    - List of departure orders for a given date.
+    """
+    day_schedule = historical_data[historical_data['1.date'] == date]
+    return list(range(1, len(day_schedule) + 1))
+
+def compute_departure_order(historical_data: pd.DataFrame)-> List[int]:
+    """
+    Computes the departure order for each record in historical data.
+
+    Parameters:
+    - historical_data: DataFrame representing the historical data.
+
+    Returns:
+    - List of departure orders.
+    """
+    unique_dates = get_unique_dates(historical_data)
+    departure_orders = []
+
+    for date in tqdm(unique_dates):
+        departure_orders.extend(compute_departure_order_for_date(historical_data, date))
+
+    return departure_orders
+
+def assign_departure_order(historical_data: pd.DataFrame)-> pd.DataFrame:
+    """
+    Assigns departure order to each record in historical data.
+
+    Parameters:
+    - historical_data: DataFrame representing the historical data.
+
+    Returns:
+    - DataFrame with assigned departure order.
+    """
+    # Extract origin departure times
+    historical_data['origin_departure_time'] = historical_data['5.schedule_detail'].apply(extract_origin_departure_time)
+
+    # Sort by date and origin departure time
+    historical_data.sort_values(by=['1.date', 'origin_departure_time'], inplace=True)
+    historical_data.reset_index(inplace=True, drop=True)
+
+    # Compute and assign departure order
+    historical_data['departure_order'] = compute_departure_order(historical_data)
+
+    return historical_data
+
 def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     '''
     Process the historical information dataset.
@@ -860,12 +940,15 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
     print('Calculating final missing data percentages...')
     historical_information.loc[:,'percentage_null'] = historical_information['5.schedule_detail'].progress_apply(calculate_missing_percentage)
 
-    # Drop rows with more than 10% missing data
+    # Drop rows with more than any missing data
     print('Dropping final rows with more than any missing data...')
     historical_information = historical_information[historical_information['percentage_null'] <= MISSING_DATA_THRESHOLD_FINAL].reset_index(drop=True)
 
+    # Assign departure order
+    print('Assigning departure order...')
+    historical_information = assign_departure_order(historical_information)
 
-    return historical_information, unique_trips
+    return historical_information
 
 if __name__ == '__main__':
 
@@ -876,6 +959,6 @@ if __name__ == '__main__':
     print("Adding schedule detail...")
     historical_information.loc[:,'5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(add_schedule_detail)
     # process historical information to add actual and predicted travel time and dwell time and get unique trips
-    historical_information_refactored, unique_trips = process_historical_data(historical_information)
+    historical_information_refactored = process_historical_data(historical_information)
     historical_information_refactored.to_csv(OUTPUT_FILENAME)
 

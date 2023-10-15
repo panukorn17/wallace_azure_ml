@@ -381,7 +381,7 @@ def compute_departure_order(historical_data: pd.DataFrame)-> List[int]:
     unique_dates = get_unique_dates(historical_data)
     departure_orders = []
 
-    for date in tqdm(unique_dates):
+    for date in unique_dates:
         departure_orders.extend(compute_departure_order_for_date(historical_data, date))
 
     return departure_orders

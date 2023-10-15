@@ -4,7 +4,6 @@ import numpy as np
 from datetime import timedelta
 
 from typing import Tuple, List
-from tqdm import tqdm
 
 def is_valid_string(value):
     return value is not None and isinstance(value, str) and value != ""
@@ -130,7 +129,7 @@ def dwell_time_extract(historical_information: pd.DataFrame, threshold_minutes: 
     extreme_value_index = []
     
     # Iterate through the DataFrame index
-    for i in tqdm(historical_information.index, desc=f'Extracting all dwell times'):
+    for i in historical_information.index:
         schedule_detail = historical_information.at[i, '5.schedule_detail']
         
         # Extract the necessary columns from schedule_detail

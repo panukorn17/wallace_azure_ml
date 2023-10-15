@@ -349,10 +349,10 @@ def df_next_n_stations(historical_info_open, station_dwell_time_unique_open, OD_
                 deviation_from_departure_next_n_station[k] = 0
                 
                 index = station_dwell_time_unique_open['1.station'].tolist().index(x.loc[j,'location'])
-                total_dwell_time_station[k] = station_dwell_time_unique_open.loc[index,'2.total_dwell_time']
-                total_dwell_time_station_predicted[k] = station_dwell_time_unique_open.loc[index,'3.total_dwell_time_predicted']
-                average_dwell_time_station[k] = station_dwell_time_unique_open.loc[index,'4.average_dwell_time']
-                average_dwell_time_station_predicted[k] = station_dwell_time_unique_open.loc[index,'5.average_dwell_time_predicted']
+                total_dwell_time_station[k] = station_dwell_time_unique_open.loc[index,'total_dwell_time']
+                total_dwell_time_station_predicted[k] = station_dwell_time_unique_open.loc[index,'total_dwell_time_predicted']
+                average_dwell_time_station[k] = station_dwell_time_unique_open.loc[index,'average_dwell_time']
+                average_dwell_time_station_predicted[k] = station_dwell_time_unique_open.loc[index,'average_dwell_time_predicted']
                 
                 #classification 
                 if j == 0 :
@@ -432,13 +432,13 @@ def df_next_n_stations(historical_info_open, station_dwell_time_unique_open, OD_
                     dwell_time_next_n_station[k] = x.loc[j+1,'dwell_time']
                     dwell_time_next_n_station_predicted[k] = x.loc[j+1,'dwell_time_predicted']
                     index_next_station = station_dwell_time_unique_open['1.station'].tolist().index(x.loc[j+1,'location'])
-                    dwell_time_next_n_station_average[k] = station_dwell_time_unique_open.loc[index_next_station,'4.average_dwell_time']
+                    dwell_time_next_n_station_average[k] = station_dwell_time_unique_open.loc[index_next_station,'average_dwell_time']
                     
                 index = station_dwell_time_unique_open['1.station'].tolist().index(x.loc[j,'location'])
-                total_dwell_time_station[k] = station_dwell_time_unique_open.loc[index,'2.total_dwell_time']
-                total_dwell_time_station_predicted[k] = station_dwell_time_unique_open.loc[index,'3.total_dwell_time_predicted']
-                average_dwell_time_station[k] = station_dwell_time_unique_open.loc[index,'4.average_dwell_time']
-                average_dwell_time_station_predicted[k] = station_dwell_time_unique_open.loc[index,'5.average_dwell_time_predicted']
+                total_dwell_time_station[k] = station_dwell_time_unique_open.loc[index,'total_dwell_time']
+                total_dwell_time_station_predicted[k] = station_dwell_time_unique_open.loc[index,'total_dwell_time_predicted']
+                average_dwell_time_station[k] = station_dwell_time_unique_open.loc[index,'average_dwell_time']
+                average_dwell_time_station_predicted[k] = station_dwell_time_unique_open.loc[index,'average_dwell_time_predicted']
                 
             
                 #classification 

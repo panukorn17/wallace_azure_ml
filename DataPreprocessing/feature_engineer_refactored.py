@@ -43,11 +43,11 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
     '''
     # Set arrival/departure time for starting/terminating stations
     print('Setting arrival/departure time for starting/terminating stations...')
-    historical_information.loc[:,'5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(set_starting_terminating_times)
+    historical_information.loc[:,'5.schedule_detail'] = historical_information['5.schedule_detail'].apply(set_starting_terminating_times)
 
     # Calculate missing data percentages
     print('Calculating missing data percentages...')
-    historical_information.loc[:,'percentage_null'] = historical_information['5.schedule_detail'].progress_apply(calculate_missing_percentage)
+    historical_information.loc[:,'percentage_null'] = historical_information['5.schedule_detail'].apply(calculate_missing_percentage)
 
     # Drop rows with more than 10% missing data
     print('Dropping rows with more than 10% missing data...')
@@ -66,7 +66,7 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
 
     # Feature engineer time-related metrics
     print('Feature engineer actual and predicted travel and dwell times...')
-    historical_information['5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(calculate_metrics, args=(NEXT_STATION_OFFSET, STATION_OFFSET_TRAVEL_TIME, STATION_OFFSET_DWELL_TIME, THRESHOLD_MINUTES, FORMAT))
+    historical_information['5.schedule_detail'] = historical_information['5.schedule_detail'].apply(calculate_metrics, args=(NEXT_STATION_OFFSET, STATION_OFFSET_TRAVEL_TIME, STATION_OFFSET_DWELL_TIME, THRESHOLD_MINUTES, FORMAT))
     
     # Extract dwell times for each station
     print('Extracting dwell times for each station...')
@@ -107,9 +107,13 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
     print('Extracting final dwell times for each station...')
     dwell_time_stations, extreme_value_index = dwell_time_extract(historical_information, THRESHOLD_MINUTES)
 
+    # Calculate summary statistics for dwell times
+    print('Calculating final summary statistics for dwell times...')
+    station_dwell_time_unique = dwell_time_summary_statistics(dwell_time_stations)
+
     # Calculate missing data percentages
     print('Calculating final missing data percentages...')
-    historical_information.loc[:,'percentage_null'] = historical_information['5.schedule_detail'].progress_apply(calculate_missing_percentage)
+    historical_information.loc[:,'percentage_null'] = historical_information['5.schedule_detail'].apply(calculate_missing_percentage)
 
     # Drop rows with more than any missing data
     print('Dropping final rows with more than any missing data...')
@@ -119,14 +123,14 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
     print('Assigning departure order...')
     historical_information = assign_departure_order(historical_information)
 
-    return historical_information
+    return historical_information, station_dwell_time_unique, od_pairs_unique
 
 if __name__ == '__main__':
 
     DATA_PATHS = ["Data/hist_info_DID_PAD_2016.csv"]
     OUTPUT_FILENAME = "Data/feature_engineered.csv"  # Adjust this accordingly, or include the dynamic filename generation logic.
 
-    historical_information = pd.read_csv(DATA_PATHS[0]).head(1000)
+    historical_information = pd.read_csv(DATA_PATHS[0])
     print("Adding schedule detail...")
     historical_information.loc[:,'5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(add_schedule_detail)
     # process historical information to add actual and predicted travel time and dwell time and get unique trips

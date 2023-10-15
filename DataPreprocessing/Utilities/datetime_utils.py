@@ -6,13 +6,6 @@ from datetime import timedelta
 from typing import Tuple, List
 from tqdm import tqdm
 
-THRESHOLD_MINUTES = 500
-MISSING_DATA_THRESHOLD_INITIAL = 10.0 
-MISSING_DATA_THRESHOLD_FINAL = 0
-STATION_OFFSET_TRAVEL_TIME = 1
-NEXT_STATION_OFFSET = 1
-FORMAT = '%H%M'
-
 def is_valid_string(value):
     return value is not None and isinstance(value, str) and value != ""
 
@@ -32,7 +25,7 @@ def set_starting_terminating_times(schedule: pd.DataFrame) -> pd.DataFrame:
     schedule.iloc[-1, schedule.columns.get_loc('gbtt_ptd')] = 'terminating'
     return schedule
 
-def get_time_difference(time1: str, time2: str, FORMAT: str) -> float():
+def get_time_difference(time1: str, time2: str, threshold_minutes: int, format: str) -> float():
     '''
     Calculate the time difference between two given times.
 
@@ -43,15 +36,15 @@ def get_time_difference(time1: str, time2: str, FORMAT: str) -> float():
     Returns:
     - Time difference between the two given times in minutes
     '''
-    startDateTime = datetime.datetime.strptime(time1, FORMAT)
-    endDateTime = datetime.datetime.strptime(time2, FORMAT)
+    startDateTime = datetime.datetime.strptime(time1, format)
+    endDateTime = datetime.datetime.strptime(time2, format)
     diff_minutes = (endDateTime - startDateTime).total_seconds() / 60.0
-    if np.abs(diff_minutes) > THRESHOLD_MINUTES:
+    if np.abs(diff_minutes) > threshold_minutes:
         endDateTime += timedelta(days=1)
         diff_minutes = (endDateTime - startDateTime).total_seconds() / 60.0
     return diff_minutes
 
-def travel_time(schedule: pd.DataFrame, FORMAT: str) -> pd.DataFrame:
+def travel_time(schedule: pd.DataFrame, next_station_offset: int, station_offset_travel_time: int, threshold_minutes: int, format: str) -> pd.DataFrame:
     '''
     Calculate the travel time for a given schedule.
 
@@ -65,27 +58,27 @@ def travel_time(schedule: pd.DataFrame, FORMAT: str) -> pd.DataFrame:
     travel_times = [0] * len(schedule)
     travel_times_predicted = [0] * len(schedule)
 
-    for j in range(len(schedule) - STATION_OFFSET_TRAVEL_TIME):
+    for j in range(len(schedule) - station_offset_travel_time):
         # for loop runs until the penultimate row to avoid index out of bounds error
         # get the actual and public arrival and departure time of the current and next station
-        actual_td, actual_ta = schedule.iloc[j]['actual_td'], schedule.iloc[j + NEXT_STATION_OFFSET]['actual_ta']
-        gbtt_ptd, gbtt_pta = schedule.iloc[j]['gbtt_ptd'], schedule.iloc[j + NEXT_STATION_OFFSET]['gbtt_pta']
+        actual_td, actual_ta = schedule.iloc[j]['actual_td'], schedule.iloc[j + next_station_offset]['actual_ta']
+        gbtt_ptd, gbtt_pta = schedule.iloc[j]['gbtt_ptd'], schedule.iloc[j + next_station_offset]['gbtt_pta']
 
         # if the actual and public arrival and departure time of the current and next station are not null then calculate the travel time
         if is_valid_string(actual_ta) and is_valid_string(actual_td):
             # the actual travel time to get to the current station starting from the second station
-            travel_times[j + NEXT_STATION_OFFSET] = get_time_difference(actual_td, actual_ta, FORMAT)
+            travel_times[j + next_station_offset] = get_time_difference(actual_td, actual_ta, threshold_minutes, format)
         
         if is_valid_string(gbtt_pta) and is_valid_string(gbtt_ptd):
             # the predicted travel time to get to the current station starting from the second station
-            travel_times_predicted[j + NEXT_STATION_OFFSET] = get_time_difference(gbtt_ptd, gbtt_pta, FORMAT)
+            travel_times_predicted[j + next_station_offset] = get_time_difference(gbtt_ptd, gbtt_pta,threshold_minutes, format)
 
     # add actual and predicted travel time a new feature to the schedule dataframe
     schedule['travel_time'] = travel_times
     schedule['travel_time_predicted'] = travel_times_predicted
     return schedule
 
-def dwell_time(schedule: pd.DataFrame, STATION_OFFSET_DWELL_TIME: int, FORMAT: str) -> pd.DataFrame:
+def dwell_time(schedule: pd.DataFrame, next_station_offset: int, station_offset_dwell_time: int, threshold_minutes: int, format: str) -> pd.DataFrame:
     '''
     Calculate the dwell time for a given schedule.
 
@@ -99,26 +92,26 @@ def dwell_time(schedule: pd.DataFrame, STATION_OFFSET_DWELL_TIME: int, FORMAT: s
     dwell_times = [0] * len(schedule)
     dwell_times_predicted = [0] * len(schedule)
 
-    for j in range(len(schedule) - STATION_OFFSET_DWELL_TIME):
+    for j in range(len(schedule) - station_offset_dwell_time):
         # for loop runs from the second row to the penultimate row as the first and last row will be the starting terminating station and not have a dwell time
-        actual_ta, actual_td = schedule.iloc[j + NEXT_STATION_OFFSET]['actual_ta'], schedule.iloc[j + NEXT_STATION_OFFSET]['actual_td']
-        gbtt_pta, gbtt_ptd = schedule.iloc[j + NEXT_STATION_OFFSET]['gbtt_pta'], schedule.iloc[j + NEXT_STATION_OFFSET]['gbtt_ptd']
+        actual_ta, actual_td = schedule.iloc[j + next_station_offset]['actual_ta'], schedule.iloc[j + next_station_offset]['actual_td']
+        gbtt_pta, gbtt_ptd = schedule.iloc[j + next_station_offset]['gbtt_pta'], schedule.iloc[j + next_station_offset]['gbtt_ptd']
         
         # if the actual and public arrival and departure time of the current and next station are not null then calculate the dwell time
         if is_valid_string(actual_ta) and is_valid_string(actual_td):
             # the actual dwell time of the current station next station starting from the second station
-            dwell_times[j + NEXT_STATION_OFFSET] = get_time_difference(actual_ta, actual_td, FORMAT)
+            dwell_times[j + next_station_offset] = get_time_difference(actual_ta, actual_td, threshold_minutes, format)
 
         if is_valid_string(gbtt_pta) and is_valid_string(gbtt_ptd):
             # the predicted dwell time of the current station next station starting from the second station
-            dwell_times_predicted[j + NEXT_STATION_OFFSET] = get_time_difference(gbtt_pta, gbtt_ptd, FORMAT)
+            dwell_times_predicted[j + next_station_offset] = get_time_difference(gbtt_pta, gbtt_ptd, threshold_minutes, format)
 
     # add actual and predicted dwell time a new feature to the schedule dataframe
     schedule['dwell_time'] = dwell_times
     schedule['dwell_time_predicted'] = dwell_times_predicted
     return schedule
 
-def dwell_time_extract(historical_information: pd.DataFrame) -> Tuple[pd.DataFrame, List[int]]:
+def dwell_time_extract(historical_information: pd.DataFrame, threshold_minutes: int) -> Tuple[pd.DataFrame, List[int]]:
     """
     Extracts dwell times for each station from the historical information.
     
@@ -152,7 +145,7 @@ def dwell_time_extract(historical_information: pd.DataFrame) -> Tuple[pd.DataFra
         
         # Check threshold conditions for each dwell time and predicted dwell time
         for dwell_time, dwell_time_predicted in zip(dwell_times, dwell_times_predicted):
-            if (np.absolute(dwell_time) > THRESHOLD_MINUTES) or (np.absolute(dwell_time_predicted) > THRESHOLD_MINUTES):
+            if (np.absolute(dwell_time) > threshold_minutes) or (np.absolute(dwell_time_predicted) > threshold_minutes):
                 extreme_value_index.append(i)
     
     dwell_time_stations = pd.DataFrame({

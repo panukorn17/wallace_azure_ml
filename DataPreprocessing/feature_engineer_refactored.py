@@ -66,11 +66,11 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
 
     # Feature engineer time-related metrics
     print('Feature engineer actual and predicted travel and dwell times...')
-    historical_information['5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(calculate_metrics, args=(STATION_OFFSET_DWELL_TIME, FORMAT))
+    historical_information['5.schedule_detail'] = historical_information['5.schedule_detail'].progress_apply(calculate_metrics, args=(NEXT_STATION_OFFSET, STATION_OFFSET_TRAVEL_TIME, STATION_OFFSET_DWELL_TIME, THRESHOLD_MINUTES, FORMAT))
     
     # Extract dwell times for each station
     print('Extracting dwell times for each station...')
-    dwell_time_stations, extreme_value_index = dwell_time_extract(historical_information)
+    dwell_time_stations, extreme_value_index = dwell_time_extract(historical_information, THRESHOLD_MINUTES)
     
     # Calculate summary statistics for dwell times
     print('Calculating summary statistics for dwell times...')
@@ -105,7 +105,7 @@ def process_historical_data(historical_information: pd.DataFrame) -> (pd.DataFra
     
     # Extract dwell times for each station
     print('Extracting final dwell times for each station...')
-    dwell_time_stations, extreme_value_index = dwell_time_extract(historical_information)
+    dwell_time_stations, extreme_value_index = dwell_time_extract(historical_information, THRESHOLD_MINUTES)
 
     # Calculate missing data percentages
     print('Calculating final missing data percentages...')

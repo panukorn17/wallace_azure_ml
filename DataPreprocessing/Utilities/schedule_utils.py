@@ -22,7 +22,7 @@ from Utilities.condition_utils import process_condition_1_ad
 from Utilities.condition_utils import process_condition_2_ad
 from Utilities.condition_utils import process_condition_3_ad
 
-def calculate_metrics(schedule: pd.DataFrame, STATION_OFFSET_DWELL_TIME: int, FORMAT: str) -> pd.DataFrame:
+def calculate_metrics(schedule: pd.DataFrame, next_station_offset: int, station_offset_travel_time: int, station_offset_dwell_time: int, threshold_minutes: int, format: str) -> pd.DataFrame:
     """
     Calculate travel and dwell times.
     
@@ -32,8 +32,8 @@ def calculate_metrics(schedule: pd.DataFrame, STATION_OFFSET_DWELL_TIME: int, FO
     Returns:
     - DataFrame with added actual and predicted travel and dwell times.
     """
-    schedule = travel_time(schedule, FORMAT)
-    schedule = dwell_time(schedule, STATION_OFFSET_DWELL_TIME, FORMAT)
+    schedule = travel_time(schedule, next_station_offset, station_offset_travel_time, threshold_minutes, format)
+    schedule = dwell_time(schedule, next_station_offset, station_offset_dwell_time, threshold_minutes, format)
     return schedule
 
 def add_schedule_detail(schedule: pd.DataFrame) -> pd.DataFrame:
@@ -78,7 +78,7 @@ def get_total_null(historical_information: pd.DataFrame) -> pd.DataFrame:
     ).sum()
     return total_null
 
-def extract_schedule_OD_travel(historical_information: pd.DataFrame, STATION_OFFSET_TRAVEL_TIME: int) -> Tuple[List[str], List[str], List[float], List[float]]:
+def extract_schedule_OD_travel(historical_information: pd.DataFrame, station_offset_travel_time: int) -> Tuple[List[str], List[str], List[float], List[float]]:
     """
     Extract details from schedule.
     
@@ -97,11 +97,11 @@ def extract_schedule_OD_travel(historical_information: pd.DataFrame, STATION_OFF
         schedule_detail = row['5.schedule_detail']
         
         # Extract details of origin and destination travel time and predicted travel time in minutes
-        for i in range(len(schedule_detail) - STATION_OFFSET_TRAVEL_TIME):
+        for i in range(len(schedule_detail) - station_offset_travel_time):
             origins.append(schedule_detail.iloc[i]['location'])
-            destinations.append(schedule_detail.iloc[i + STATION_OFFSET_TRAVEL_TIME]['location'])
-            travel_times.append(schedule_detail.iloc[i + STATION_OFFSET_TRAVEL_TIME]['travel_time'])
-            predicted_travel_times.append(schedule_detail.iloc[i + STATION_OFFSET_TRAVEL_TIME]['travel_time_predicted'])
+            destinations.append(schedule_detail.iloc[i + station_offset_travel_time]['location'])
+            travel_times.append(schedule_detail.iloc[i + station_offset_travel_time]['travel_time'])
+            predicted_travel_times.append(schedule_detail.iloc[i + station_offset_travel_time]['travel_time_predicted'])
             
     return origins, destinations, travel_times, predicted_travel_times
 
@@ -127,7 +127,7 @@ def create_OD_pairs_dataframe(origins: List[str], destinations: List[str], trave
     })
 
 
-def drop_nan_pairs(historical_information: pd.DataFrame, OD_pairs_unique: pd.DataFrame, NEXT_STATION_OFFSET: int)-> pd.DataFrame:
+def drop_nan_pairs(historical_information: pd.DataFrame, OD_pairs_unique: pd.DataFrame, next_station_offset: int)-> pd.DataFrame:
     """
     Drop rows with nan values.
 
@@ -144,7 +144,7 @@ def drop_nan_pairs(historical_information: pd.DataFrame, OD_pairs_unique: pd.Dat
     OD_pairs_unique_nan = [tuple(i) for i in OD_pairs_unique_nan]
     # Check for each row if it contains any OD nan pair
     to_drop = historical_information['5.schedule_detail'].apply(
-        lambda x: any((row['location'], x.loc[idx + NEXT_STATION_OFFSET, 'location']) in OD_pairs_unique_nan for idx, row in x.iterrows() if idx + NEXT_STATION_OFFSET < len(x))
+        lambda x: any((row['location'], x.loc[idx + next_station_offset, 'location']) in OD_pairs_unique_nan for idx, row in x.iterrows() if idx + next_station_offset < len(x))
     )
     return historical_information[~to_drop].reset_index(drop=True)
 
@@ -160,7 +160,7 @@ def drop_all_null_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
     return df.dropna(axis=0, how='all')
 
-def extract_missing_aa_data(historical_information: pd.DataFrame, NEXT_STATION_OFFSET: int) -> pd.DataFrame:
+def extract_missing_aa_data(historical_information: pd.DataFrame, next_station_offset: int) -> pd.DataFrame:
     '''
     Extract data with missing actual arrival times and their indexes in the historical information dataframe and schedule dataframe.
 
@@ -174,15 +174,15 @@ def extract_missing_aa_data(historical_information: pd.DataFrame, NEXT_STATION_O
     for idx, row in historical_information.iterrows():
         x = row['5.schedule_detail']
         for j in x.index[:-1]:
-            if pd.isna(x.loc[j + NEXT_STATION_OFFSET, 'actual_ta']):
+            if pd.isna(x.loc[j + next_station_offset, 'actual_ta']):
                 data = {
                     '1.origin': x.loc[j, 'location'],
-                    '2.destination': x.loc[j + NEXT_STATION_OFFSET, 'location'],
+                    '2.destination': x.loc[j + next_station_offset, 'location'],
                     '3.actual_departure_prev_station': x.loc[j, 'actual_td'],
-                    '4.actual_arrival_curr_station': x.loc[j + NEXT_STATION_OFFSET, 'actual_ta'],
-                    '5.actual_departure_curr_station': x.loc[j + NEXT_STATION_OFFSET, 'actual_td'],
+                    '4.actual_arrival_curr_station': x.loc[j + next_station_offset, 'actual_ta'],
+                    '5.actual_departure_curr_station': x.loc[j + next_station_offset, 'actual_td'],
                     '6.h_i_index': idx,
-                    '7.s_d_index': j + NEXT_STATION_OFFSET,
+                    '7.s_d_index': j + next_station_offset,
                     'average_actual_travel_time': 0,
                     'average_predicted_travel_time': 0,
                     'average_actual_dwell_time': 0,
@@ -192,7 +192,7 @@ def extract_missing_aa_data(historical_information: pd.DataFrame, NEXT_STATION_O
 
     return pd.DataFrame(rows_list)
 
-def extract_missing_ad_data(historical_information: pd.DataFrame, NEXT_STATION_OFFSET: int) -> pd.DataFrame:
+def extract_missing_ad_data(historical_information: pd.DataFrame, next_station_offset: int) -> pd.DataFrame:
     '''
     Extract data with missing actual departure times and their indexes in the historical information dataframe and schedule dataframe.
 
@@ -209,10 +209,10 @@ def extract_missing_ad_data(historical_information: pd.DataFrame, NEXT_STATION_O
             if pd.isna(x.loc[j, 'actual_td']):
                 data = {
                     '1.origin': x.loc[j, 'location'],
-                    '2.destination': x.loc[j + NEXT_STATION_OFFSET, 'location'],
+                    '2.destination': x.loc[j + next_station_offset, 'location'],
                     '3.actual_arrival_curr_station': x.loc[j, 'actual_ta'],
                     '4.actual_departure_curr_station': x.loc[j, 'actual_td'],
-                    '5.actual_arrival_next_station': x.loc[j + NEXT_STATION_OFFSET, 'actual_ta'],
+                    '5.actual_arrival_next_station': x.loc[j + next_station_offset, 'actual_ta'],
                     '6.h_i_index': idx,
                     '7.s_d_index': j,
                     'average_actual_travel_time': 0,
@@ -231,7 +231,7 @@ def impute_missing_actual_arrival(aa_nan: pd.DataFrame, historical_information: 
     Parameters:
     - aa_nan: DataFrame containing missing data.
     - historical_information: DataFrame representing the historical information dataset.
-    - format: Format of time strings.
+    - format: format of time strings.
     '''
     # Initialize column with default values
     aa_nan['actual_arrival_time_1'] = [0] * len(aa_nan)
@@ -307,7 +307,7 @@ def impute_missing_actual_departure(ad_nan: pd.DataFrame, historical_information
         s_d_index = ad_nan.at[i, '7.s_d_index']
         historical_information.at[h_i_index, '5.schedule_detail'].at[s_d_index, 'actual_td'] = departure_time
 
-def impute_missing_data(historical_information: pd.DataFrame, od_pairs_unique: pd.DataFrame, station_dwell_time_unique: pd.DataFrame, NEXT_STATION_OFFSET: int, FORMAT: str):
+def impute_missing_data(historical_information: pd.DataFrame, od_pairs_unique: pd.DataFrame, station_dwell_time_unique: pd.DataFrame, next_station_offset: int, format: str):
     '''
     Impute missing data into the historical_information dataframe.
 
@@ -332,24 +332,24 @@ def impute_missing_data(historical_information: pd.DataFrame, od_pairs_unique: p
         total_null_new = total_null
         # Extract missing actual arrival times
         print('Extracting missing actual arrival data...')
-        aa_nan = extract_missing_aa_data(historical_information, NEXT_STATION_OFFSET)
+        aa_nan = extract_missing_aa_data(historical_information, next_station_offset)
         aa_nan = drop_all_null_rows(aa_nan)
         # check null:
         if not(aa_nan.empty):
             aa_nan = merge_travel_times(aa_nan, od_pairs_unique)
             aa_nan = merge_dwell_times(aa_nan, station_dwell_time_unique)
             # Impute missing actual arrival time into the historical_information dataframe and update the actual arrival missing dataframe
-            impute_missing_actual_arrival(aa_nan, historical_information, FORMAT)
+            impute_missing_actual_arrival(aa_nan, historical_information, format)
         # Extract missing actual departure times
         print('Extracting missing actual departure data...')
-        ad_nan = extract_missing_ad_data(historical_information, NEXT_STATION_OFFSET)
+        ad_nan = extract_missing_ad_data(historical_information, next_station_offset)
         ad_nan = drop_all_null_rows(ad_nan)
         # check null:
         if not(ad_nan.empty):
             ad_nan = merge_travel_times(ad_nan, od_pairs_unique)
             ad_nan = merge_dwell_times(ad_nan, station_dwell_time_unique)
             # Impute missing actual departure time into the historical_information dataframe and update the actual departure missing dataframe
-            impute_missing_actual_departure(ad_nan, historical_information, FORMAT)
+            impute_missing_actual_departure(ad_nan, historical_information, format)
         # Compute missing data stats
         total_null = get_total_null(historical_information)
         print('Total null values =', total_null)

@@ -9,7 +9,7 @@ Run:
 This will take care of installing all required dependencies  
 
 ## HSP Data
-The data used in for this code is from [Darwin's HSP Platform](https://wiki.openraildata.com/index.php/HSP). Specifically, the data to be preprocessed and trained on can be requested by a HTTP POST call of the 'serviceDetails' API.  
+To replicate this research: training on 2016 Didcot Parkway to London Paddington Network and testing on the 2017 Didcot Parkway to London Paddington Network, please refer to the Preprocessing stage. If you would like to apply this pipeline to a different network, please register with National Rail Enquiries and request for the appropriate data by a HTTP POST call of the 'serviceDetails' API. Further guidance on this API can be found on the [Darwin's HSP Platform](https://wiki.openraildata.com/index.php/HSP)..  
 
 ```
 POST https://hsp-prod.rockshore.net/api/v1/serviceMetrics HTTP/1.1
@@ -29,7 +29,7 @@ Content-Length: 178
 }
 ```
 
-## Preprocessing the data:
+## Preprocessing the data on the 2016 Didcot Parkway to London Paddington Network:
 To preprocess the data, run `'data_preprocess.py'`. This will create a directory where preprocessed data is dumped.
 
 ## Training the model

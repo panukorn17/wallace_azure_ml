@@ -16,7 +16,7 @@ class DataProcessor:
 
     def _load_data(self):
         dfs = [pd.read_csv(path) for path in self.data_paths]
-        return pd.concat(dfs).reset_index(drop=True).head(1000)
+        return pd.concat(dfs).reset_index(drop=True)
 
     def add_schedule_df_detail(self):
         print("Adding schedule detail...")
@@ -36,13 +36,20 @@ if __name__ == '__main__':
     current_path = os.getcwd()
     dir_path = os.path.join(current_path, "DataPreprocessing")
     sys.path.insert(0, dir_path)
+
+    # Check if the "PREPROCESSED" folder exists, and create it if it doesn't
+    data_folder = os.path.join(current_path, "Data")
+    preprocessed_folder = os.path.join(data_folder, "PREPROCESSED")
     
+    if not os.path.exists(preprocessed_folder):
+        os.makedirs(preprocessed_folder)
+
     from feature_engineer_refactored import process_historical_data
     from df_next_n_stations import df_next_n_stations
     from add_delay_mechanism import add_delay_mechanism
     
-    DATA_PATHS = ["./Data/hist_info_DID_PAD_2016.csv", "./Data/hist_info_PAD_DID_2016.csv"]
-    OUTPUT_FILENAME = "./Data/data_next_1_station.csv"  # Adjust this accordingly, or include the dynamic filename generation logic.
+    DATA_PATHS = ["./Data/RAW/hist_info_DID_PAD_2016.csv", "./Data/RAW/hist_info_PAD_DID_2016.csv"]
+    OUTPUT_FILENAME = "./Data/PREPROCESSED/data_next_1_station.csv" 
 
     processor = DataProcessor(DATA_PATHS)
     processor.add_schedule_df_detail()
